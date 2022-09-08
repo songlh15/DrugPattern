@@ -1,0 +1,987 @@
+---
+title: "Crohn's disease treatment drugs pattern"
+author: "Lihai "
+date: "October 28, 2021"
+output:
+   html_document:
+    toc: true # table of content true
+    toc_depth: 4  # upto three depths of headings (specified by #, ## and ###)
+    # number_sections: true  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    # highlight: tango  # specifies the syntax highlighting style
+    # css: my.css   # you can add your custom css, should be in same folder
+    run_time: shiny
+  # pdf_document: default
+  # word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r workingEnv,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+# setwd('//tsclient/songl/Dropbox/work/covid/visual')
+###load library
+#source('Y:\\Crohns\\program\\packages_list.R')
+# webshot::install_phantomjs()
+
+# lib2 <- c('stringi','stringr','reshape','plyr','dplyr','tidyr',
+#           'gridExtra','data.table','lattice','latticeExtra',
+#           'ggplot2','sqldf','haven','readr','shiny','DT','tools','cellranger',
+#           'broom','cellranger','clipr','curl','dbplyr','fs','hexbin','httr',
+#           'modelr','lubridate','plotly','selectr','tidyverse','whisker','xml2',
+#           'readxl','reprex','rvest','sqldf','DT','stringr','tools','data.table',
+#           'haven','ggplot2','leaflet','shinyWidgets','gdtools','maps','systemfonts',
+#           'uuid','ggiraph','shinyjs','shinythemes','table1')
+
+
+# if (length(setdiff(lib2, rownames(installed.packages()))) > 0) {
+#   suppressMessages(suppressPackageStartupMessages((install.packages(setdiff(lib2, rownames(installed.packages())),repos = "http://cran.us.r-project.org"))))
+# }
+
+# sapply(lib2,library,character=TRUE)
+library(tidyverse)
+library(stringi)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(reshape)
+library(reshape2)
+library(sqldf)
+library(readr)
+library(shiny)
+library(DT)
+library(lubridate)
+library(curl)
+library(scales)
+library(data.table)
+library(shinyWidgets)
+library(shinythemes)
+library(shinyjs)
+library(ggiraph)
+library(plotly)
+library(table1)
+```
+
+## Background
+
+There are different way to treat Crohns' disease. We would like to look at the usage pattern for *6* different drugs across four health system.
+
+The data was derived from PEDSNET database V4.1. Orignal datasets were created and processed in SAS. 
+
+We are interested in look at different treatment pattrens based on route of administration: IV or oral(subQ) for those exposure drugs. Patients who had at least 2 visits were included in this analysis. First, let's look at IV drugs.
+
+## IV drugs
+
+### Infliximab
+
+```{r data import, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# if(!file.exists('dsample')){
+# dsample <- fread('Y:\\Crohns\\data\\exposure_add.csv')
+# # head(dsample$drug_exposure_start_date)
+# # head(dmy(dsample$drug_exposure_start_date))
+# dsample$drug_exposure_start_date <- dmy(dsample$drug_exposure_start_date)
+#   # head(dsample$drug_exposure_end_date)
+# # head(dmy(dsample$drug_exposure_end_date))
+# dsample$drug_exposure_end_date <- dmy(dsample$drug_exposure_end_date)
+# }
+
+# save(dsample,drug_cd,drug_cds,file="Y:\\Crohns\\data\\derived\\pattern_data_cd.Rdata")
+# loading lab data, drugs codes, and formats etc
+load('pattern_data_cd.Rdata')
+
+load('Pedsnet_lab.Rdata')
+
+# load cleaned exposure drug
+load('exposure_cleaned.Rdata')
+
+demos <- fread('Y:\\Crohns\\data\\demos_range.csv')
+demos$crohns_start <- ymd(demos$crohns_start)
+demos$visit_start <- ymd(demos$visit_start)
+demos$visit_end <- ymd(demos$visit_end)
+demos_range <- demos[,':='(studyday=visit_end-crohns_start)]
+save(demos_range,file='demos_range.Rdata')
+load('demos_range.Rdata')
+# filter those drug given after diagnosis
+
+
+
+## formatting demographics from  file fmt
+
+# racef <-fmt[FMTNAME == 'RACE',c('FMTNAME','START','LABEL')]
+# demorace <-merge(demo,racef,by.x=c('race'),by.y=c('START'),all.x=T)[,':='(Race=LABEL)][,-c('FMTNAME','START','LABEL')]
+# 
+# demogender <-demorace[fmt[FMTNAME == 'GENDER',c('FMTNAME','START','LABEL')],on=c('gender'='START'),allow.cartesian=F][,':='(Gender=LABEL)][,-c('FMTNAME','START','LABEL')]
+# 
+# demoeth <-demogender[fmt[FMTNAME == 'ETHNICITY',c('FMTNAME','START','LABEL')],on=c('ethnicity'='START'),allow.cartesian=F][,':='(Ethnicity=LABEL)][,-c('FMTNAME','START','LABEL')]
+# 
+# library(table1)
+# metadata <- list(
+#   labels=list(
+#     Gender = "Gender",
+#     Race = "Race",
+#     Ethnicity = "Ethnicity",
+#     dx_age_year ="Diagnosis age"
+#      ),
+#   units=list(
+#     dx_age_year = "Years"
+#     )
+#   )
+# chtdemo <- t1read(demoeth[!is.na(person_id)], metadata)
+
+```
+
+
+#### Infliximab cohort summary
+
+
+```{r infliz, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# drug_cd <- fread('Y:\\Crohns\\data\\cd_drugs.csv')
+# drug_cds <- fread('Y:\\Crohns\\data\\target_ids_added.csv')
+# inflix <- drug_cds[grep('inflixim',tolower(ingredient)),]
+# 
+# infc <- data.table(dsample)[drug_concept_id %in% inflix$concept_id & site !='seattle',]
+# 
+# # finding missing
+# noend <- infc[is.na(drug_exposure_end_date) & is.na(days_supply),] #758 missing date & 684 missing both date and supply
+# 
+# 
+# infs <- merge(infc,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# 
+# # head(infs$crohns_start)
+# infs$crohns_start <- ymd(infs$crohns_start)
+# 
+# # fill in date using days of supply
+# # infm <- infs[is.na(drug_exposure_end_date) & !is.na(days_supply), ':='(drug_exposure_end_date=drug_exposure_start_date+days_supply)]
+# #  
+# # head(infm$crohns_start)
+# # infs$crohns_start <- ymd(infs$crohns_start)
+# 
+# inf <- infs[drug_exposure_start_date >=crohns_start,]
+# notin <- infs[drug_exposure_start_date < crohns_start,]
+# 
+# # inf <- arrange(infm,person_id,drug_exposure_start_date)
+# setkey(inf,person_id,drug_exposure_start_date)
+# infs <- inf[order(person_id,drug_exposure_start_date,-drug_exposure_end_date)]
+# 
+# infu <- unique(infs,by=c('person_id','drug_exposure_start_date'))
+
+infuf <- infu[is.na(drug_exposure_end_date),]
+
+# fill those missing
+infuf <- infu[is.na(drug_exposure_end_date)& !is.na(quantity) & !is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date+quantity*(refills+1),imp=1)][is.na(drug_exposure_end_date)& !is.na(quantity) & is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date+quantity,imp=1)][is.na(drug_exposure_end_date) & is.na(quantity) & !is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date+refills+1,imp=1)][is.na(drug_exposure_end_date)& is.na(quantity) & is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date,imp=1)]
+
+# check if all are filled
+nodate <- infuf[is.na(drug_exposure_end_date),] #0
+# add trt_days and lag_days
+# infp <- infuf[,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_end_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+# infp$lag_days <- as.numeric(infp$lag_days)
+# infp$trt_days <- as.numeric(infp$trt_days) 
+
+## Per discussion with Jing, lag days change from last end date to last start day
+# and combine <=3 days as one visit
+infp <- infuf[,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_start_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+infp$lag_days <- as.numeric(infp$lag_days)
+infp$trt_days <- as.numeric(infp$trt_days)
+
+# cumulative treatment days
+infps <- infp[!is.na(lag_days),':='(trt_interval=cumsum(lag_days)),by=person_id]
+#adding visit numbers
+infps$visit <- rowid(infps$person_id)
+
+# checking 0 lag_day patients
+inf2 <- infps[visit>=2 & lag_days<=3,][,c('person_id','visit','drug_exposure_start_date','drug_exposure_end_date')]
+
+setkey(inf2,person_id)
+setkey(infps,person_id)
+
+require(sqldf)
+merged <- sqldf('select a.person_id,a.drug_exposure_start_date as exposure_start__Date,a.drug_exposure_end_date as exposure_end__Date,a.visit,b.visit as visit0,b.drug_exposure_start_date as start__Date,b.drug_exposure_end_date as end__Date           
+                from infps a left join inf2 b
+                 on a.person_id=b.person_id and
+                 a.visit-b.visit=-1
+                 order by a.person_id,a.visit', method = "name__class")
+ne <- data.table(merged)[!is.na(visit0),]
+# p6063842 <- ne[person_id==6063842,]
+
+# combine <=3 lag visit as one
+colm <- colnames(inf2)
+combv <- ne[,':='(drug_exposure_start_date=exposure_start,drug_exposure_end_date=end)][,..colm]
+
+# to be excluded
+exc <- ne[,c('person_id','visit0','start','end')]
+setnames(exc,c('visit0','start','end'),c('visit','drug_exposure_start_date','drug_exposure_end_date'))
+
+# exlcuding exc from infps
+infpsm <- infps[!exc,on=.(person_id,visit)]
+
+# updating original data with combined start and end expousure datedate
+inf2 <- merge(infpsm,combv,by=c('person_id','visit'),all.x=T)
+infcl <- colnames(infp)
+
+infimp <- inf2[,':='(drug_exposure_end_date=ifelse(!is.na(drug_exposure_end_date.y),ymd(drug_exposure_end_date.y),ymd(drug_exposure_end_date.x)),
+                    drug_exposure_start_date=drug_exposure_start_date.x)][,..infcl]
+
+infimp$drug_exposure_start_date <- as_date(infimp$drug_exposure_start_date,origin = lubridate::origin)
+infimp$drug_exposure_end_date <- as_date(infimp$drug_exposure_end_date,origin = lubridate::origin)
+
+
+
+# Redo lag and visit sequence
+infp2 <- infimp[,-c('lag_days','trt_days','visit')][,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_start_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+infp2$lag_days <- as.numeric(infp2$lag_days)
+infp2$trt_days <- as.numeric(infp2$trt_days)
+
+# cumulative treatment days
+infps2 <- infp2[!is.na(lag_days),':='(trt_interval=cumsum(lag_days)),by=person_id]
+#adding visit numbers
+infps2$visit <- rowid(infps2$person_id)
+# summary(infps2$lag_days)
+
+inf0 <- infps2[,':='(last_visit_end_date=shift(drug_exposure_end_date)),by=person_id]
+inflag0 <- infps2[lag_days==0,c('person_id','ingredient','drug_exposure_start_date','drug_exposure_end_date','last_visit_end_date','lag_days','visit','site')]
+# l124097 <- infps[person_id==1240979,]
+# write.csv(inf0,'Y:\\Crohns\\drug_pattern\\lag0list.csv')
+
+# lag0chk <- infps[person_id %in% inf0$person_id & abs(visit-inf0$visit)==1,]
+# length(unique(lag0chk$person_id))
+
+# start to calculate lag days and visit number
+# infp <- infuf %>% group_by(person_id) %>% mutate(drug_exposure_end_date=replace(drug_exposure_end_date,is.na(drug_exposure_end_date),drug_exposure_start_date[is.na(drug_exposure_end_date)])) %>%
+  
+# library(dplyr)
+# infp <- infuf %>% group_by(person_id) %>%
+# mutate(trt_days = drug_exposure_end_date- drug_exposure_start_date) %>%
+# mutate(lag_days = drug_exposure_start_date-lag(drug_exposure_end_date,1,                                     default =first(drug_exposure_start_date)
+#                                                    )) %>%
+#   mutate(lag_days = as.numeric(lag_days)) %>%
+#   mutate(trt_interval = cumsum(lag_days)) %>%
+#   mutate(visit = row_number())
+
+# checking those with 0 lag_days
+# library(data.table)
+# 
+# lag0 <- data.table(infp)[lag_days==0,]
+# lagpat <-data.table(infp)[person_id %in% lag0$person_id,][,c('person_id','drug_exposure_start_date','drug_exposure_start_date','lag_days','trt_interval','visit')]
+# table(lag0$visit)
+# inflim cohort 
+
+table1(~ Gender + Race + Ethnicity + dx_age_year|site  , data=chtdemo[person_id %in% infu$person_id],droplevels=F, caption='Infliximab cohort summary')
+```
+
+#### Infliximab drug pattern
+
+There are only 11 exposure records with treamtment started date before diagosis were excluded.
+
+```{r pattern, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+library(ggplot2)
+library(plotly)
+# second visit
+
+
+pattrend <- infps2[visit>=2,] %>%
+  ggplot(aes(y =visit, x=lag_days,color=factor(person_id),group=person_id,text = paste('Person:', person_id, '<br>Lag days', lag_days,'<br>Visit: ', visit)))+ geom_point()+ xlim(0,120) + theme(legend.position = "none") +  facet_wrap(~site)
+
+ggplotly(pattrend,tooltip = c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+```
+
+
+#### Infliximab drug pattern by site
+
+```{r pattern_site, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+patt.plots <- vector(mode = "list", length = 4)
+
+for (i in 1:4)
+{
+sitelist <- unique(infps$site)
+plotdata <- data.table(infps2)[site==sitelist[i] &visit>=2,c('site','person_id','visit','lag_days')]
+ 
+plotname <- 
+  ggplot(plotdata, aes(y =visit, x=lag_days,color=factor(person_id),group=person_id))+geom_point()+
+  xlim(0,120)+ theme(legend.position = "none") + ggtitle(paste0("Pattern for ",sitelist[i]) )
+
+# ggplotly(choppat) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+patt.plots[[i]] <- plotname
+}
+
+ggplotly(patt.plots[[1]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+ggplotly(patt.plots[[2]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(patt.plots[[3]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+ggplotly(patt.plots[[4]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+# 
+# plotly::subplot(site1,site2,site3,site4,nrow=2) %>% layout(title = list(text = "Infliximab pattern by sites"))
+
+# patt.plots[[2]]
+# patt.plots[[3]]
+# patt.plots[[4]]
+
+# ggplotly(patt.plots[[1]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+# Per request sample those patients with lag days small after visit20
+peti_lags <- infps2[visit>20 & lag_days<10,][,c('person_id','site','ingredient','drug_exposure_start_date','days_supply','refills','drug_exposure_end_date','visit','lag_days','last_visit_end_date')]
+petisamp <- unique(peti_lags,by='site')
+peticol <- colnames(peti_lags)
+petisamp4 <- infps2[person_id %in% petisamp$person_id,][,..peticol]
+# write.csv(petisamp,'Y:\\Crohns\\data\\infi_short_lags.csv')
+# write.csv(petisamp4,'Y:\\Crohns\\data\\infi_short_long.csv')
+
+```
+
+### *Vedolizumab*
+
+Simalarly, we can look at another IV drug Vedolizumab.
+
+#### Vedolizumab cohort
+
+```{r vedolizumab, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# if(!file.exists('drug_cds')){
+# # drug_cd <- fread('Y:\\Crohns\\data\\cd_drugs.csv')
+# drug_cds <- fread('Y:\\Crohns\\data\\target_ids_added.csv')
+# 
+# }
+
+# drugid <- drug_cds[grep('vedolizumab',tolower(ingredient)),]
+# 
+# vedc <- data.table(dsample)[drug_concept_id %in% drugid$concept_id & site !='seattle',]
+# 
+# # finding missing
+# noend <- vedc[is.na(drug_exposure_end_date) & is.na(days_supply),] #758 missing date & 684 missing both date and supply
+# 
+# veds <- merge(vedc,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# # class(veds$drug_exposure_start_date)
+# # fill in date using days of supply
+# vedm <- veds[is.na(drug_exposure_end_date) & !is.na(days_supply), ':='(drug_exposure_end_date=drug_exposure_start_date+days_supply)]
+#  
+# # head(vedm$crohns_start)
+# # class(vedm$crohns_start)
+# vedm$crohns_start <- ymd(veds$crohns_start)
+# ved <- vedm[drug_exposure_start_date >=crohns_start,]
+# 
+# notin <- vedm[drug_exposure_start_date < crohns_start,]
+# # ved <- arrange(vedm,person_id,drug_exposure_start_date)
+# setkey(ved,person_id,drug_exposure_start_date)
+# vedu <- unique(ved,by=c('person_id','drug_exposure_start_date','drug_exposure_end_date'))
+
+# vedp <- vedu %>% group_by(person_id) %>% mutate(drug_exposure_end_date=replace(drug_exposure_end_date,is.na(drug_exposure_end_date),drug_exposure_start_date[is.na(drug_exposure_end_date)])) %>%
+#   mutate(trt_days = drug_exposure_end_date- drug_exposure_start_date) %>%
+#   mutate(lag_days = drug_exposure_start_date-lag(drug_exposure_end_date,1,                                     default =first(drug_exposure_start_date) )) %>%
+#   mutate(lag_days = as.numeric(lag_days)) %>%
+#   mutate(trt_interval = cumsum(lag_days)) %>%
+#   mutate(visit = row_number())
+
+# veds <- merge(vedc,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# 
+# # head(veds$crohns_start)
+# veds$crohns_start <- ymd(veds$crohns_start)
+
+# fill in date using days of supply
+# vedm <- veds[is.na(drug_exposure_end_date) & !is.na(days_supply), ':='(drug_exposure_end_date=drug_exposure_start_date+days_supply)]
+#  
+# head(vedm$crohns_start)
+# veds$crohns_start <- ymd(veds$crohns_start)
+
+# table summary for the cohost
+
+
+
+# ved <- veds[drug_exposure_start_date >=crohns_start,]
+# notin <- veds[drug_exposure_start_date < crohns_start,]
+
+# ved <- arrange(vedm,person_id,drug_exposure_start_date)
+# setkey(ved,person_id,drug_exposure_start_date)
+# veds <- ved[order(person_id,drug_exposure_start_date,-drug_exposure_end_date)]
+# 
+# vedu <- unique(veds,by=c('person_id','drug_exposure_start_date'))
+table1(~ Gender + Race + Ethnicity + dx_age_year|site, data=chtdemo[person_id  %in% vedu$person_id],droplevels=F, caption='Vedolizumab cohort summary')
+
+```
+
+#### Pattern for Vedolizumab
+
+```{r vedo_patter_site, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+
+veduf <- vedu[is.na(drug_exposure_end_date),]
+# fill those missing
+veduf <- vedu[is.na(drug_exposure_end_date)& !is.na(quantity) & !is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date+quantity*(refills+1),imp=1)][is.na(drug_exposure_end_date)& !is.na(quantity) & is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date+quantity,imp=1)][is.na(drug_exposure_end_date) & is.na(quantity) & !is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date+refills+1,imp=1)][is.na(drug_exposure_end_date)& is.na(quantity) & is.na(refills),':='(drug_exposure_end_date=drug_exposure_start_date,imp=1)]
+
+# check if all are filled
+nodate <- veduf[is.na(drug_exposure_end_date),] #0
+# add trt_days and lag_days
+# vedp <- veduf[,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_end_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+# vedp$lag_days <- as.numeric(vedp$lag_days)
+# vedp$trt_days <- as.numeric(vedp$trt_days) 
+
+## Per discussion with Jing, lag days change from last end date to last start day
+# and combine <=3 days as one visit
+vedp <- veduf[,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_start_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+vedp$lag_days <- as.numeric(vedp$lag_days)
+vedp$trt_days <- as.numeric(vedp$trt_days)
+
+# cumulative treatment days
+vedps <- vedp[!is.na(lag_days),':='(trt_interval=cumsum(lag_days)),by=person_id]
+#adding visit numbers
+vedps$visit <- rowid(vedps$person_id)
+
+# checking 0 lag_day patients
+ved2 <- vedps[visit>=2 & lag_days<=3,][,c('person_id','visit','drug_exposure_start_date','drug_exposure_end_date')]
+
+setkey(ved2,person_id)
+setkey(vedps,person_id)
+
+require(sqldf)
+merged <- sqldf('select a.person_id,a.drug_exposure_start_date as exposure_start__Date,a.drug_exposure_end_date as exposure_end__Date,a.visit,b.visit as visit0,b.drug_exposure_start_date as start__Date,b.drug_exposure_end_date as end__Date           
+                from vedps a left join ved2 b
+                 on a.person_id=b.person_id and
+                 a.visit-b.visit=-1
+                 order by a.person_id,a.visit', method = "name__class")
+ne <- data.table(merged)[!is.na(visit0),]
+# p6063842 <- ne[person_id==6063842,]
+
+# combine <=3 lag visit as one
+colm <- colnames(ved2)
+combv <- ne[,':='(drug_exposure_start_date=exposure_start,drug_exposure_end_date=end)][,..colm]
+
+# to be excluded
+exc <- ne[,c('person_id','visit0','start','end')]
+setnames(exc,c('visit0','start','end'),c('visit','drug_exposure_start_date','drug_exposure_end_date'))
+
+# exlcuding exc from vedps
+vedpsm <- vedps[!exc,on=.(person_id,visit)]
+
+# updating original data with combined start and end expousure datedate
+ved2 <- merge(vedpsm,combv,by=c('person_id','visit'),all.x=T)
+vedcl <- colnames(vedp)
+
+vedimp <- ved2[,':='(drug_exposure_end_date=ifelse(!is.na(drug_exposure_end_date.y),ymd(drug_exposure_end_date.y),ymd(drug_exposure_end_date.x)),
+                    drug_exposure_start_date=drug_exposure_start_date.x)][,..vedcl]
+
+vedimp$drug_exposure_start_date <- as_date(vedimp$drug_exposure_start_date,origin = lubridate::origin)
+vedimp$drug_exposure_end_date <- as_date(vedimp$drug_exposure_end_date,origin = lubridate::origin)
+
+# Redo lag and visit sequence
+vedp2 <- vedimp[,-c('lag_days','trt_days','visit')][,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_start_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+vedp2$lag_days <- as.numeric(vedp2$lag_days)
+vedp2$trt_days <- as.numeric(vedp2$trt_days)
+
+# cumulative treatment days
+vedps2 <- vedp2[!is.na(lag_days),':='(trt_interval=cumsum(lag_days)),by=person_id]
+#adding visit numbers
+vedps2$visit <- rowid(vedps2$person_id)
+
+pattrend <- vedps2[visit>=2,] %>%
+  ggplot(aes(y =visit, x=lag_days,color=factor(person_id),group=person_id,text = paste('Person:', person_id, '<br>Lag days', lag_days,'<br>Visit: ', visit))) + geom_point()+ xlim(0,120) + theme(legend.position = "none") +  facet_wrap(~site)
+
+ggplotly(pattrend,tooltip = c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+
+# summary(vedps2$lag_days)
+
+
+patt.plots <- vector(mode = "list", length = 4)
+
+for (i in 1:4)
+{
+# plotname <- paste0('patt_',sitelist[[4]])
+sitelist <- unique(vedps2$site)
+plotdata <- data.table(vedps2)[site==sitelist[i] & visit>=2,c('site','person_id','visit','lag_days')]
+ 
+plotname <- 
+  ggplot(plotdata, aes(y =visit, x=lag_days,color=factor(person_id),group=person_id,text = paste('Person:', person_id, '<br>Lag days', lag_days,'<br>Visit: ', visit)))+geom_point()+
+  xlim(0,120)+ theme(legend.position = "none") + ggtitle(paste0("Vedolizumab Pattern for ",sitelist[i]) )
+
+# ggplotly(choppat) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+patt.plots[[i]] <- plotname
+}
+
+ggplotly(patt.plots[[1]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+ggplotly(patt.plots[[2]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+ggplotly(patt.plots[[3]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+ggplotly(patt.plots[[4]]) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+```
+
+## Oral drugs
+
+Let's look at oral drug. First, Azathioprine, which is normally taken once per day, We consider more than 90 days from last exposure as new episode.
+
+### *Azathoipine*
+
+#### Azathoipine cohort
+
+```{r aza, echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+#### oral
+## azathioprine
+
+# drugid <- drug_cds[grep('azathio',tolower(ingredient)),]
+# 
+# azac <- data.table(dsample)[drug_concept_id %in% drugid$concept_id & site !='seattle',]
+
+# finding missing
+# class(azac$drug_exposure_end_date)
+# noend <- azac[is.na(drug_exposure_end_date) & is.na(days_supply),] # missing date & missing both date and supply
+# azas <- merge(azac,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# 
+# setkey(azas,person_id,drug_exposure_start_date)
+# azas <- azas[order(person_id,drug_exposure_start_date,-drug_exposure_end_date)]
+# 
+# azau <- unique(azas,by=c('person_id','drug_exposure_start_date'))
+# 
+# # head(infm$crohns_start)
+# azau$crohns_start <- ymd(azau$crohns_start)
+# aza <- azau[drug_exposure_start_date >=crohns_start,]
+
+# table 1
+library(table1)
+table1(~ Gender + Race + Ethnicity + dx_age_year|site  , data=chtdemo[person_id %in% aza$person_id],droplevels=F, caption='Azathioprine cohort summary')
+```
+
+#### Azathoipine pattern
+
+```{r,azapat,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+notin <- aza[drug_exposure_start_date < crohns_start,] # no patient
+
+## fill in exposure date if days_supply or quantity not missing or start date
+azaf <- aza[is.na(drug_exposure_end_date) & !is.na(days_supply) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+days_supply*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills==0|is.na(refills),':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity)][is.na(drug_exposure_end_date),':='(est=1,drug_exposure_end_date=drug_exposure_start_date)]
+ # check if expsoure end missing
+
+azam <- azaf[is.na(drug_exposure_end_date),] # should be 0
+# ':='(drug_exposure_end_date=drug_exposure_start_date+quantity*refills)]
+
+## change conti_gap to allow disjoint of treatment periods
+# aza <- azaf %>%group_by(person_id)%>%
+#   mutate(drug_exposure_end_date=replace(drug_exposure_end_date,is.na(drug_exposure_end_date),drug_exposure_start_date[is.na(drug_exposure_end_date)])) %>%
+  # mutate(est_drug_exposure_end_date=drug_exposure_start_date+(days_supply)*(refills+1)) %>% mutate(est_drug_exposure_end_date=replace(est_drug_exposure_end_date,drug_exposure_end_date>=est_drug_exposure_end_date,drug_exposure_end_date[drug_exposure_end_date>=est_drug_exposure_end_date]))%>% mutate(trt_conti = drug_exposure_start_date <= lag(est_drug_exposure_end_date+conti_gap,1,default = first(drug_exposure_start_date) ) )
+
+# calculate gap daysdays
+cont_gap=90
+
+azafs <- azaf[,':='(gap_days=ifelse(drug_exposure_start_date-shift(drug_exposure_end_date)>cont_gap,1,0)),by=(person_id)][is.na(gap_days),':='(gap_days=0)][,':='(seqs=cumsum(gap_days)+1),by=person_id]
+
+# azafg <- azaf[,':='(gap=drug_exposure_start_date-shift(drug_exposure_end_date)),by=(person_id)]
+
+# azafgs <-azafg[person_id %in% azafg[gap<0,]$person_id,]
+# 
+# [is.na(gap_days),':='(gap_days=0)][,':='(seqs=cumsum(gap_days)+1),by=person_id]
+
+# calculating trtment sequence
+azarange <- azafs[,.(start=min(drug_exposure_start_date),end=max(drug_exposure_end_date),duration=max(drug_exposure_end_date)-min(drug_exposure_start_date)+1),.(person_id,seqs)]
+
+# calculating trtment episode
+azaepi <- azarange[,':='(gap=ifelse(start-shift(end)>cont_gap,1,0)),by=(person_id)][is.na(gap),':='(gap=0)][,':='(episode=cumsum(gap)+1),by=person_id]
+
+# get duration by episode
+azaepisode <- azaepi[,.(start=min(start),end=max(end),duration=as.numeric(max(end)-min(start)+1)),.(person_id,episode)][,':='(induction=ifelse(episode<2,1,2))]
+# 
+# 
+# azarange$duration <- as.numeric(azarange$duration )
+
+# a661597 <- azau[person_id==661597,]
+# # checking example
+# comb661597 <- azarange[person_id==661597,]
+# merge inf
+
+azademo <- merge(azaepisode,chtdemo[,c('person_id','site')],by='person_id')
+
+# adding study range
+azademor <- merge(azademo,demos_range[,c('person_id','instudy','studyday')],by='person_id')[,':='(durations=duration/as.numeric(studyday)*100)]
+
+azaind <- azademo[,.(n=length(episode),mean=mean(duration),median=median(duration)),.(person_id,induction)]
+
+# person checking
+azan <- azademo[,.(Patients=length(unique(person_id))),.(site,episode)]
+azans <- azademo[,.(Total=length(unique(person_id))),.(site)]
+azansum <- merge(azan,azans,by=c('site'))[,':='(percent=round((Patients/Total)*100,.01))]
+knitr::kable(azansum[,-('Total')], caption = "Azathroiprine treatment episode patients count.")
+
+# Boxplot for the sequences using standardized durations
+azplot <- ggplot(azademor[episode<=3,], aes(y = duration, x=episode,group=factor(episode)))+geom_boxplot(aes(text='site')) + coord_flip() + ylim(0,500)+ scale_x_discrete( limits=c("1", "2", "3")) +
+labs(x = "Treatment Episode",y = "days") + ggtitle("Azathoipine treatment duration by treatment episode")
+
+azpltsite <- azplot + ggtitle("Azathoipine treatment Pattern") +facet_wrap(~site)
+
+ggplotly(azplot,tooltip='text')  %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(azpltsite,tooltip='text') %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+# try using standardized by length of crohns dx to last visit
+```
+
+#### *Standardized treatment duration*
+
+Using Crohon's diagnosis data to last visit date as study period, we standardize the treatment duration by percentage of days account for study period.
+
+```{r,azapats,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# Boxplot for the sequences using standardized durations
+azplots <- ggplot(azademor[episode<=3,], aes(y = durations, x=episode,group=factor(episode)))+geom_boxplot(aes(text='site')) + coord_flip() + ylim(0,100)+ scale_x_discrete( limits=c("1", "2", "3")) +
+labs(x = "Treatment Episode",y = "Duration of treatment(%)") + ggtitle("Azathoipine treatment duration percentage by episode")
+
+azpltsites <- azplots + ggtitle("Azathoipine treatment duration(%)") +facet_wrap(~site)
+
+ggplotly(azplots,tooltip='text')  %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(azpltsites,tooltip='text') %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+
+# summary(azarange[seqs<=2,]$duration)
+azini <- azademo[induction==1,]
+azfl <- azademo[induction==2,]
+
+sump <- data.frame(unclass(summary(azini$duration)), check.names = FALSE, stringsAsFactors = FALSE)
+
+names(sump) <- 'Initial Duration'
+# x <- knitr::kable(sum)
+# x <- print(summary(azini$duration))
+#       
+# kableExtra::add_footnote(x, "Induction duration")
+# knitr::kable(sump, caption = "Induction duration.")
+sumf <- data.frame(unclass(summary(azfl$duration)), check.names = FALSE, stringsAsFactors = FALSE)
+
+names(sumf) <- 'Followup Duration'
+# x <- knitr::kable(sum)
+# x <- print(summary(azini$duration))
+
+# Combine together
+#       
+combsum <- cbind(sump,sumf)
+# kableExtra::add_footnote(x, "Induction duration")
+#knitr::kable(combsum, caption = "Medication duration summary.")
+
+
+```
+
+### *Methotrexate*
+
+Another drugs we are going to look at is: *Methotrexate*. This drug has two forms: Oral or subcutaneous (subQ). We apply same rule  as Azathioprine for episode definition.
+
+#### Methotrexate cohort
+
+```{r,Methotrexate,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# 
+# drugid <- drug_cds[grep('methotrexate',tolower(ingredient)),]
+# 
+# methc <- data.table(dsample)[drug_concept_id %in% drugid$concept_id & site !='seattle',]
+# 
+# # finding missing
+# meths <- merge(methc,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# 
+# setkey(meths,person_id,drug_exposure_start_date)
+# meths <- meths[order(person_id,drug_exposure_start_date,-drug_exposure_end_date)]
+# 
+# methu <- unique(meths,by=c('person_id','drug_exposure_start_date'))
+# 
+# # head(infm$crohns_start)
+# methu$crohns_start <- ymd(methu$crohns_start)
+# meth <- methu[drug_exposure_start_date >=crohns_start,]
+
+# table 1
+library(table1)
+table1(~ Gender + Race + Ethnicity + dx_age_year|site  , data=chtdemo[person_id %in% meth$person_id],droplevels=F, caption='Meththroiprine cohort summary')
+```
+
+#### Meththroiprine pattern
+
+```{r,Methplot,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+notin <- meth[drug_exposure_start_date < crohns_start,] # no patient
+
+## fill in exposure date if days_supply or quantity not missing or start date
+methf <- meth[is.na(drug_exposure_end_date) & !is.na(days_supply) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+days_supply*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills==0|is.na(refills),':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity)][is.na(drug_exposure_end_date),':='(est=1,drug_exposure_end_date=drug_exposure_start_date)]
+ # check if expsoure end missing
+
+methm <- methf[is.na(drug_exposure_end_date),] # should be 0
+
+# calculate gap days
+cont_gap=90
+
+methfs <- methf[,':='(gap_days=ifelse(drug_exposure_start_date-shift(drug_exposure_end_date)>cont_gap,1,0)),by=(person_id)][is.na(gap_days),':='(gap_days=0)][,':='(seqs=cumsum(gap_days)+1),by=person_id]
+
+# calculating trtment range
+methrange <- methfs[,.(start=min(drug_exposure_start_date),end=max(drug_exposure_end_date),duration=max(drug_exposure_end_date)-min(drug_exposure_start_date)+1),.(person_id,seqs)][,':='(induction=ifelse(seqs<=3,1,2))]
+methrange$duration <- as.numeric(methrange$duration )
+# checking example
+# comb661597 <- methrange[person_id==661597,]
+# merge inf
+methepi <- methrange[,':='(gap=ifelse(start-shift(end)>cont_gap,1,0)),by=(person_id)][is.na(gap),':='(gap=0)][,':='(episode=cumsum(gap)+1),by=person_id]
+
+# get duration by episode
+methepisode <- methepi[,.(start=min(start),end=max(end),duration=as.numeric(max(end)-min(start)+1)),.(person_id,episode)][,':='(induction=ifelse(episode<2,1,2))]
+# 
+
+methdemo <- merge(methepisode,chtdemo[,c('person_id','site')],by='person_id')
+
+methind <- methdemo[,.(n=length(episode),mean=mean(duration),median=median(duration)),.(person_id,induction)]
+
+# data checking
+# summary(methdemo$seqs)
+
+# person count checking
+methn <- methdemo[,.(Patients =length(unique(person_id))),.(site,episode)]
+metht <- methdemo[,.(Total=length(unique(person_id))),.(site)]
+methnt <- merge(methn,metht,by=c('site'))[,':='(percent=round((Patients/Total)*100,.01))]
+
+# adding study range
+methnr <- merge(methdemo,demos_range[,c('person_id','instudy','studyday')],by='person_id')[,':='(durations=duration/as.numeric(studyday)*100)]
+
+knitr::kable(methnt[,-c('Total')], caption = "Meththroiprine treatment episode patients count.")
+# Boxplot for the sequences
+methplot <- ggplot(methdemo[episode<=4,], aes(y = duration, x=episode,group=factor(episode)))+geom_boxplot(text='site') + coord_flip() + ylim(0,500) + scale_x_discrete( limits=c("1", "2",'3','4')) +
+labs(x = "Treatment sequence",y = "Days") + ggtitle("Methotrexate treatment duration by treatment episode")
+
+methpltsite <- methplot + ggtitle("Methotrexate treatment Pattern") +facet_wrap(~site)
+
+ggplotly(methplot,tooltip = 'text') %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(methpltsite,tooltip = 'text') %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+```
+
+#### *Standardized Meththroiprine pattern*
+
+Using similar standarization, we can show new treatment duration by percent of study period accordingly.
+
+```{r,Methplots,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+# standardised boxplot
+methplots <- ggplot(methnr[episode<=4,], aes(y = durations, x=episode,group=factor(episode)))+geom_boxplot(text='site') + coord_flip() + ylim(0,100) + scale_x_discrete( limits=c("1", "2",'3','4')) +
+labs(x = "Treatment Episode",y = "Durations(%)") + ggtitle("Methotrexate treatment duration by treatment episode")
+
+methpltsites <- methplots + ggtitle("Methotrexate treatment pattern") +facet_wrap(~site)
+
+ggplotly(methplots,tooltip = 'text') %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(methpltsites,tooltip = 'text') %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+```
+
+## Subcutaneous(SubQ) drug
+
+### Humira (adalimumab)
+
+Given the special usage of Humira, we can look at the gaps between doses. The recommended subcutaneous dosage of HUMIRA for adult patients with Crohn's disease (CD) is 160 mg initially on Day 1 (given in one day or split over two consecutive days), followed by 80 mg two weeks later (Day 15). Two weeks later (Day 29) begin a dosage of 40 mg every other week.
+
+#### Humira cohort summary
+
+```{r,humira1,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+# drugid <- drug_cds[grep('adalimumab',tolower(ingredient)),]
+# 
+# humac <- data.table(dsample)[drug_concept_id %in% drugid$concept_id & site !='seattle',]
+# 
+# # finding missing
+# humas <- merge(humac,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# 
+# setkey(humas,person_id,drug_exposure_start_date)
+# humas <- humas[order(person_id,drug_exposure_start_date,-drug_exposure_end_date)]
+# 
+# humau <- unique(humas,by=c('person_id','drug_exposure_start_date'))
+# 
+# # head(infm$crohns_start)
+# humau$crohns_start <- ymd(humau$crohns_start)
+# huma <- humau[drug_exposure_start_date >=crohns_start,]
+
+# table 1
+library(table1)
+table1(~ Gender + Race + Ethnicity + dx_age_year|site  , data=chtdemo[person_id %in% huma$person_id],droplevels=F, caption='Humira cohort summary')
+```
+
+#### Humira pattern
+
+```{r,humirap,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+notin <- huma[drug_exposure_start_date < crohns_start,] # no patient
+
+## fill in exposure date if days_supply or quantity not missing or start date
+humaf <- huma[is.na(drug_exposure_end_date) & !is.na(days_supply) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+days_supply*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills==0|is.na(refills),':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity)][is.na(drug_exposure_end_date),':='(est=1,drug_exposure_end_date=drug_exposure_start_date)]
+ # check if expsoure end missing
+
+humam <- humaf[is.na(drug_exposure_end_date),] # should be 0
+
+# humafs <- humaf[,':='(gaps=drug_exposure_start_date-shift(drug_exposure_end_date)),by=(person_id)][is.na(gap),':='(gap_days=0)][,':='(seqs=cumsum(gap_days)+1),by=person_id]
+
+# calculating trtment range
+humafs <- humaf[,':='(trt_days=drug_exposure_end_date-drug_exposure_start_date,lag_days=drug_exposure_start_date-shift(drug_exposure_start_date,1),visit=rank(drug_exposure_start_date)),by=person_id]
+
+# humarange <- humafs[!is.na(lag_days),':='(trt_interval=cumsum(lag_days)),by=person_id]
+humarange <- humafs
+#adding visit numbers
+humarange$visit <- rowid(humarange$person_id)
+humarange$lag_days <- as.numeric(humarange$lag_days)
+humarange$trt_days <- as.numeric(humarange$trt_days)
+humarange$duration <- as.numeric(humarange$duration )
+
+# 
+# knitr::kable(human, caption = "humathroiprine treatment sequence patients count.")
+# point plot
+humaplotp <- ggplot(humarange[visit>=2,], aes(x = lag_days, y=visit,group=factor(person_id),color=factor(site)))+geom_point(aes(text = paste('Person:', person_id,'<br>visit: ',visit,
+                 '<br>Lag_days: ', lag_days,
+                 '<br>Visit: ', visit)))+ theme(legend.position = "bottom",legend.title = element_text(colour="white")) + labs(y= "Visit",x = "Lag Days") + ggtitle("Humira treatment pattern")
+
+humasum <- humarange[visit>=2 & visit<=6,.(mean=mean(lag_days),median=median(lag_days)),.(site,visit)]
+knitr::kable(humasum,caption='Humira lag days by visit by sites')
+
+humapltsitep <- humaplotp + ggtitle("Humira treatment pattern by sites") +facet_wrap(~site)
+
+# table(humarange$site)
+
+ggplotly(humaplotp,tooltip=c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(humapltsitep,tooltip=c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+# Boxplot for the sequences
+humaplot <- ggplot(humarange[visit>=2,], aes(x = visit, y=lag_days,group=factor(site),color=factor(site)))+ geom_boxplot() + coord_flip() + theme(legend.position = "bottom",legend.title = element_text(colour="white") ) + labs(x = "Visit",y = "Lag Days") + ggtitle("Humira treatment pattern boxplot by visit")
+
+# humasum <- humarange[visit>=2 & visit<=6,.(mean=mean(lag_days),median=median(lag_days)),.(site,visit)]
+# knitr::kable(humasum,caption='Humira lag days by visit by sites')
+
+humapltsite <- humaplot + ggtitle("Humira treatment Pattern boxplot by sites") +facet_wrap(~site)
+
+# table(humarange$site)
+
+ggplotly(humaplot,tooltip =c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(humapltsite,tooltip = c('text')) %>%  plotly::config(displaylogo=F, modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d", "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+```
+
+####  Humira treatment timeline
+
+To check Humira treatment timeline, we also put treatment start and end in segments.
+
+```{r,humiraline,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# ggplot(df, aes(y=site)) +
+#   geom_segment(aes(x=log.start, xend=log.end, y=site, yend=site), size=5)
+
+setkey(humarange,site,person_id,visit)
+
+humaplotl <- ggplot(humarange, aes(y = person_id, group=factor(person_id),color=factor(site)))+  geom_segment(aes(x=drug_exposure_start_date, xend=drug_exposure_end_date, y=person_id, yend=person_id,text = paste('Person:', person_id,
+                 '<br>Start: ', as.Date(drug_exposure_start_date),
+                 '<br>End: ', as.Date(drug_exposure_end_date),
+                 '<br>Visit: ', visit)), size=1) + theme(legend.position = "bottom",legend.title = element_text(colour="white")) +  scale_y_discrete() + labs(y= "Patients",x = "Date") + ggtitle("Humira treatment pattern by start and end day")
+ 
+humapltsitepl <- humaplotl + ggtitle("Humira treatment pattern by date") +facet_wrap(~site)
+
+ggplotly(humaplotl,tooltip = c("text")) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(humapltsitepl,tooltip = c("text")) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+
+```
+
+### Stelara(Ustekinumab) 
+
+We assume that Stelera pattern is similar both in induction and subQ. 
+
+#### Stelera cohort summary
+
+```{r,sterela1,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+# drugid <- drug_cds[grep('ustekinumab',tolower(ingredient)),]
+# 
+# ustec <- data.table(dsample)[drug_concept_id %in% drugid$concept_id & site !='seattle',]
+# 
+# # finding missing
+# ustes <- merge(ustec,chtdemo[,c('person_id','crohns_start')],by='person_id')
+# 
+# setkey(ustes,person_id,drug_exposure_start_date)
+# ustes <- ustes[order(person_id,drug_exposure_start_date,-drug_exposure_end_date)]
+# 
+# usteu <- unique(ustes,by=c('person_id','drug_exposure_start_date'))
+# 
+# # head(infm$crohns_start)
+# usteu$crohns_start <- ymd(usteu$crohns_start)
+# uste <- usteu[drug_exposure_start_date >=crohns_start,]
+
+# table 1
+library(table1)
+table1(~ Gender + Race + Ethnicity + dx_age_year|site  , data=chtdemo[person_id %in% uste$person_id],droplevels=F, caption='Stelera cohort summary')
+```
+
+#### Stelera Pattern
+
+```{r,sterelapat,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+
+notin <- uste[drug_exposure_start_date < crohns_start,] # no patient
+
+## fill in exposure date if days_supply or quantity not missing or start date
+ustef <- uste[is.na(drug_exposure_end_date) & !is.na(days_supply) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+days_supply*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills>=0, ':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity*(refills+1))][is.na(drug_exposure_end_date) & !is.na(quantity) & refills==0|is.na(refills),':='(est=1,drug_exposure_end_date=drug_exposure_start_date+quantity)][is.na(drug_exposure_end_date),':='(est=1,drug_exposure_end_date=drug_exposure_start_date)]
+ # check if expsoure end missing
+
+ustem <- ustef[is.na(drug_exposure_end_date),] # should be 0
+
+# ustefs <- ustef[,':='(gaps=drug_exposure_start_date-shift(drug_exposure_end_date)),by=(person_id)][is.na(gap),':='(gap_days=0)][,':='(seqs=cumsum(gap_days)+1),by=person_id]
+
+# calculating trtment range
+ustefs <- ustef[,':='(trt_days=as.numeric(drug_exposure_end_date-drug_exposure_start_date+1),lag_days=as.numeric(drug_exposure_start_date-shift(drug_exposure_start_date,1)),visit=rank(drug_exposure_start_date)),by=person_id]
+
+# usterange <- ustefs[!is.na(lag_days),':='(trt_interval=cumsum(lag_days)),by=person_id]
+usterange <- ustefs
+#adding visit numbers
+usterange$visit <- rowid(usterange$person_id)
+# usterange$lag_days <- as.numeric(usterange$lag_days)
+# usterange$trt_days <- as.numeric(usterange$trt_days)
+
+ustesum <- usterange[visit>=2,.(Mean=round(mean(lag_days),.1),Median=round(median(lag_days),.1),                          Q1=round(quantile(lag_days,probs=0.25),.1),Q3=round(quantile(lag_days,probs = 0.75),.1)),.(site,visit)]
+setkey(ustesum,site,visit)
+knitr::kable(ustesum,caption='Stelera lag days by visit by sites')
+
+usteplotp <- ggplot(usterange[visit>=2,], aes(x = lag_days, y=visit,group=factor(person_id),color=factor(site)))+geom_point(aes(text = paste('Person:', person_id,'<br>Lag_days: ', lag_days,
+                 '<br>Visit: ', visit))) + theme(legend.position = "bottom",legend.title = element_text(colour="white")) + labs(y= "Visit",x = "Lag Days") + ggtitle("Stelera treatment pattern")
+
+ustepltsitep <- usteplotp + ggtitle("Stelera treatment Pattern") +facet_wrap(~site)
+
+# table(usterange$site)
+
+ggplotly(usteplotp,tooltip=c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(ustepltsitep,tooltip=c('text')) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+# Boxplot for the sequences
+plot <- ggplot(usterange[visit>=2,], aes(x = visit, y =lag_days,group=factor(site),color=factor(site)))+geom_boxplot() + coord_flip() 
+
+usteplot <- plot + theme(legend.position = "bottom",legend.title = element_text(colour="white") ) + labs( x= "Visit",y = "Lag Days") + ggtitle("Stelera treatment pattern boxplot by episode")
+
+# ustesum <- usterange[visit>=2 & visit<=6,.(mean=mean(lag_days),median=median(lag_days)),.(site,visit)]
+# knitr::kable(ustesum,caption='Humira lag days by visit by sites')
+
+ustepltsite <- usteplot + ggtitle("Stelara treatment lag days boxplot by site") +facet_wrap(~site)
+
+# table(usterange$site)
+
+ggplotly(usteplot) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",   "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+ggplotly(ustepltsite) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d","zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+```
+
+#### Stelera treatment segment
+
+Similarly, we would like to look at the timeline of Stelera treatment.
+
+```{r,steleraline,echo=FALSE,error=FALSE,message=FALSE,warning=FALSE}
+# ggplot(df, aes(y=site)) +
+#   geom_segment(aes(x=log.start, xend=log.end, y=site, yend=site), size=5)
+
+setkey(usterange,site,person_id,visit)
+
+usteplotl <- ggplot(usterange, aes(y = person_id, group=factor(person_id),color=factor(site)))+  geom_segment(aes(x=drug_exposure_start_date, xend=drug_exposure_end_date, y=person_id, yend=person_id,text = paste('Person:', person_id,
+                 '<br>Start: ', as.Date(drug_exposure_start_date),
+                 '<br>End: ', as.Date(drug_exposure_end_date),
+                 '<br>Visit: ', visit)), size=0.5) + theme(legend.position = "bottom",legend.title = element_text(colour="white")) +  scale_y_discrete() + labs(y= "Patients",x = "Date") + ggtitle("Stelera treatment start end date")
+ 
+ustepltsitepl <- usteplotl + ggtitle("Stelera treatment Pattern by date") +facet_wrap(~site)
+
+# ggplotly(usteplotl)
+ggplotly(usteplotl,tooltip = c("text")) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+# tooltip = c("text", "x", "city")
+
+ggplotly(ustepltsitepl,tooltip = c("text")) %>% plotly::config(displaylogo=F,                                           modeBarButtonsToRemove =                                              list("sendDataToCloud",'toImage',"zoom2d","pan2d","select2d","lasso2d",                                                    "zoomIn2d","zoomOut2d","toggleSpikelines"))
+
+
+```
